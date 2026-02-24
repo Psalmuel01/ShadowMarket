@@ -1,0 +1,15 @@
+[package]
+name = "shadow_market"
+version = "0.1.0"
+edition = "2024_07"
+
+[dependencies]
+starknet = "2.9.2"
+
+[lib]
+sierra = true
+casm = false
+
+[[target.starknet-contract]]
+sierra = true
+casm = true

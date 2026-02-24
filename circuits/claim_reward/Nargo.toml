@@ -1,0 +1,6 @@
+[package]
+name = "claim_reward"
+type = "bin"
+authors = [""]
+
+[dependencies]
