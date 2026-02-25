@@ -7,12 +7,32 @@ Private prediction market core stack:
 - `Verifier`: policy gate + Garaga-compatible verifier dispatch.
 - `NullifierRegistry`: global nullifier anti-double-claim state.
 - `ShieldVault`: optional collateral pool with proof-gated withdraw/payout.
-- `MerkleTreeLib`: Poseidon-based hash, commitment/nullifier helpers, path checks.
+- `MerkleTreeLib`: Pedersen-based hash, commitment/nullifier helpers, path checks.
 
 ## Build
 
 ```bash
 scarb build
+```
+
+## Noir Toolchain
+
+This repo is currently pinned by convention to:
+
+- `nargo version = 1.0.0-beta.18`
+
+Run:
+
+```bash
+./scripts/check_noir.sh
+```
+
+This validates local `nargo` version and compiles both circuits.
+
+Generate circuit artifacts + program hashes:
+
+```bash
+./scripts/compile_circuits.sh
 ```
 
 ## Contract flow
@@ -27,11 +47,34 @@ scarb build
 6. Oracle resolves via `Market.resolve_market(outcome)`.
 7. Winners claim via `Market.claim_reward(...)` with nullifier and proof.
 
+`Market` now enforces strict public input binding before verifier calls, so calldata cannot diverge from proved public values.
+
 ## ZK circuits
 
-Noir circuit templates are in `circuits/`:
+Noir circuits are in `circuits/`:
 
-- `circuits/position_commitment`
-- `circuits/claim_reward`
+- `/Users/sam/Desktop/Starknet/ShadowMarket/circuits/position_commitment`
+- `/Users/sam/Desktop/Starknet/ShadowMarket/circuits/claim_reward`
 
-The current circuit hash functions are placeholders for scaffolding. Replace with Noir Poseidon primitives before production.
+Both circuits now enforce:
+
+- commitment hash correctness
+- Merkle path-based root constraints
+- strict public input ordering
+- nullifier derivation and payout rule checks (`claim_reward`)
+
+## Program Hash Registration
+
+Register accepted program hashes:
+
+```bash
+./scripts/register_program_hashes.sh <verifier_address>
+```
+
+`register_program_hashes.sh` auto-loads hashes from `circuits/program_hashes.env`.
+If your Garaga deployment uses different identifiers, override that file before registration.
+
+See:
+
+- `/Users/sam/Desktop/Starknet/ShadowMarket/docs/garaga_pipeline.md`
+- `/Users/sam/Desktop/Starknet/ShadowMarket/docs/shield_vault_tongo.md`

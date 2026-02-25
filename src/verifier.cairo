@@ -67,6 +67,22 @@ pub mod Verifier {
     }
 
     #[external(v0)]
+    fn set_program_hashes(ref self: ContractState, program_hashes: Span<felt252>, enabled: bool) {
+        self.assert_owner();
+
+        let mut i = 0_usize;
+        loop {
+            if i == program_hashes.len() {
+                break;
+            };
+            let program_hash = *program_hashes.at(i);
+            self.accepted_program_hashes.write(program_hash, enabled);
+            self.emit(ProgramHashSet { program_hash, enabled });
+            i += 1_usize;
+        };
+    }
+
+    #[external(v0)]
     fn set_garaga_verifier(ref self: ContractState, garaga_verifier: ContractAddress) {
         self.assert_owner();
         self.garaga_verifier.write(garaga_verifier);

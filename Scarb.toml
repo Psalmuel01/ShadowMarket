@@ -6,6 +6,10 @@ edition = "2024_07"
 [dependencies]
 starknet = "2.9.2"
 
+[dev-dependencies]
+snforge_std = "0.38.0"
+assert_macros = "2.9.2"
+
 [lib]
 sierra = true
 casm = false
@@ -13,3 +17,9 @@ casm = false
 [[target.starknet-contract]]
 sierra = true
 casm = true
+
+[scripts]
+test = "snforge test"
+
+[tool.scarb]
+allow-prebuilt-plugins = ["snforge_std"]

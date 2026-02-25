@@ -1,0 +1,13 @@
+_payout_recipient = ""
+amount = ""
+blinding_factor = ""
+leaf_index = ""
+market_id = ""
+market_outcome = ""
+market_root = ""
+merkle_siblings = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+nullifier = ""
+payout_high = ""
+payout_low = ""
+position_side = ""
+user_secret = ""

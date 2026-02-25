@@ -1,0 +1,10 @@
+amount = ""
+blinding_factor = ""
+commitment = ""
+leaf_index = ""
+market_id = ""
+merkle_siblings = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+new_merkle_root = ""
+old_merkle_root = ""
+position_side = ""
+user_secret = ""

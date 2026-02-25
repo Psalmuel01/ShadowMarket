@@ -13,6 +13,26 @@ pub mod Market {
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
 
+    // `add_commitment` public input schema:
+    // [market_id, leaf_index, commitment, old_root, new_root]
+    const ADD_PI_MARKET_ID_IDX: usize = 0;
+    const ADD_PI_LEAF_INDEX_IDX: usize = 1;
+    const ADD_PI_COMMITMENT_IDX: usize = 2;
+    const ADD_PI_OLD_ROOT_IDX: usize = 3;
+    const ADD_PI_NEW_ROOT_IDX: usize = 4;
+    const ADD_PI_LEN: usize = 5;
+
+    // `claim_reward` public input schema:
+    // [market_id, root, outcome, nullifier, payout_low, payout_high, payout_recipient]
+    const CLAIM_PI_MARKET_ID_IDX: usize = 0;
+    const CLAIM_PI_ROOT_IDX: usize = 1;
+    const CLAIM_PI_OUTCOME_IDX: usize = 2;
+    const CLAIM_PI_NULLIFIER_IDX: usize = 3;
+    const CLAIM_PI_PAYOUT_LOW_IDX: usize = 4;
+    const CLAIM_PI_PAYOUT_HIGH_IDX: usize = 5;
+    const CLAIM_PI_RECIPIENT_IDX: usize = 6;
+    const CLAIM_PI_LEN: usize = 7;
+
     #[storage]
     struct Storage {
         market_id: u64,
@@ -89,12 +109,25 @@ pub mod Market {
         proof: Span<felt252>,
     ) -> felt252 {
         self.assert_not_resolved();
+        assert(public_inputs.len() == ADD_PI_LEN, 'BAD_PI_LEN');
+
+        let market_id: felt252 = self.market_id.read().into();
+        let current_leaf_index = self.next_index.read();
+        let current_root = self.merkle_root.read();
+
+        assert(*public_inputs.at(ADD_PI_MARKET_ID_IDX) == market_id, 'PI_MARKET_ID');
+        assert(
+            *public_inputs.at(ADD_PI_LEAF_INDEX_IDX) == current_leaf_index.into(), 'PI_LEAF_INDEX',
+        );
+        assert(*public_inputs.at(ADD_PI_COMMITMENT_IDX) == commitment, 'PI_COMMITMENT');
+        assert(*public_inputs.at(ADD_PI_OLD_ROOT_IDX) == current_root, 'PI_OLD_ROOT');
 
         let verified = IVerifierDispatcher { contract_address: self.verifier.read() }
             .verify_proof(program_hash, public_inputs, proof);
         assert(verified, 'INVALID_PROOF');
 
         let (new_root, leaf_index) = self.append_commitment_and_compute_root(commitment);
+        assert(new_root == *public_inputs.at(ADD_PI_NEW_ROOT_IDX), 'PI_NEW_ROOT');
         self.emit(CommitmentAdded { commitment, new_root, leaf_index });
         new_root
     }
@@ -121,6 +154,23 @@ pub mod Market {
         proof: Span<felt252>,
     ) {
         assert(self.is_resolved.read(), 'NOT_RESOLVED');
+        assert(public_inputs.len() == CLAIM_PI_LEN, 'BAD_PI_LEN');
+
+        let market_id: felt252 = self.market_id.read().into();
+        let root = self.merkle_root.read();
+        let payout_low: felt252 = payout_amount.low.into();
+        let payout_high: felt252 = payout_amount.high.into();
+        let outcome: felt252 = if self.resolution_outcome.read() { 1 } else { 0 };
+
+        assert(*public_inputs.at(CLAIM_PI_MARKET_ID_IDX) == market_id, 'PI_MARKET_ID');
+        assert(*public_inputs.at(CLAIM_PI_ROOT_IDX) == root, 'PI_ROOT');
+        assert(*public_inputs.at(CLAIM_PI_OUTCOME_IDX) == outcome, 'PI_OUTCOME');
+        assert(*public_inputs.at(CLAIM_PI_NULLIFIER_IDX) == nullifier, 'PI_NULLIFIER');
+        assert(*public_inputs.at(CLAIM_PI_PAYOUT_LOW_IDX) == payout_low, 'PI_PAY_LOW');
+        assert(*public_inputs.at(CLAIM_PI_PAYOUT_HIGH_IDX) == payout_high, 'PI_PAY_HIGH');
+        assert(
+            *public_inputs.at(CLAIM_PI_RECIPIENT_IDX) == payout_recipient.into(), 'PI_RECIPIENT',
+        );
 
         let nullifier_registry = INullifierRegistryDispatcher {
             contract_address: self.nullifier_registry.read(),
@@ -200,10 +250,10 @@ pub mod Market {
                 if idx % 2_u32 == 0_u32 {
                     self.filled_subtrees.write(level, node);
                     let zero = MerkleTreeLib::zero_hash(level);
-                    node = MerkleTreeLib::poseidon_pair(node, zero);
+                    node = MerkleTreeLib::hash_pair(node, zero);
                 } else {
                     let left = self.filled_subtrees.read(level);
-                    node = MerkleTreeLib::poseidon_pair(left, node);
+                    node = MerkleTreeLib::hash_pair(left, node);
                 };
 
                 idx = idx / 2_u32;

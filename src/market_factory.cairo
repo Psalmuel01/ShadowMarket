@@ -91,7 +91,7 @@ pub mod MarketFactory {
         Serde::<ContractAddress>::serialize(@nullifier_registry, ref constructor_calldata);
         Serde::<ContractAddress>::serialize(@shield_vault, ref constructor_calldata);
 
-        let salt = MerkleTreeLib::poseidon_pair(question_hash, market_id.into());
+        let salt = MerkleTreeLib::hash_pair(question_hash, market_id.into());
         let (market_address, _) = deploy_syscall(
             self.market_class_hash.read(), salt, constructor_calldata.span(), false,
         )
