@@ -1,10 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createIntegrations } from "@/lib/use-integrations";
 import type { IntegrationBundle } from "@/lib/integrations";
-import { createMockIntegrations } from "@/lib/mocks/mock-integrations";
 import { mockActivity } from "@/lib/mocks/mock-data";
-import type { ActivityItem, MarketSummary, PositionSide, VaultSnapshot } from "@/lib/types";
+import type {
+  ActivityItem,
+  CreateMarketRequest,
+  FactorySnapshot,
+  MarketSummary,
+  PositionSide,
+  ProofArtifact
+} from "@/lib/types";
 import type { WalletSession } from "@/lib/integrations/wallet";
 
 export type AsyncStatus = "idle" | "running" | "success" | "error";
@@ -12,21 +19,19 @@ export type AsyncStatus = "idle" | "running" | "success" | "error";
 interface AsyncStates {
   boot: AsyncStatus;
   connect: AsyncStatus;
-  position: AsyncStatus;
-  claim: AsyncStatus;
+  create: AsyncStatus;
+  commitment: AsyncStatus;
   resolve: AsyncStatus;
-  deposit: AsyncStatus;
-  withdraw: AsyncStatus;
+  claim: AsyncStatus;
 }
 
 const defaultStates: AsyncStates = {
   boot: "idle",
   connect: "idle",
-  position: "idle",
-  claim: "idle",
+  create: "idle",
+  commitment: "idle",
   resolve: "idle",
-  deposit: "idle",
-  withdraw: "idle"
+  claim: "idle"
 };
 
 const formatError = (error: unknown): string => {
@@ -51,35 +56,39 @@ const prependActivity = (
       severity
     },
     ...items
-  ].slice(0, 12);
+  ].slice(0, 15);
 };
 
 export interface ShadowMarketState {
   integrations: IntegrationBundle;
   wallet: WalletSession | null;
+  factory: FactorySnapshot | null;
   markets: MarketSummary[];
   selectedMarket: MarketSummary | null;
-  vault: VaultSnapshot | null;
   activity: ActivityItem[];
   status: AsyncStates;
   error: string | null;
   setSelectedMarketId: (marketId: string) => void;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
-  placePrivatePosition: (side: PositionSide, amountUsd: number) => Promise<void>;
+  createMarket: (request: CreateMarketRequest) => Promise<void>;
+  addCommitment: (commitment: string, proof: ProofArtifact) => Promise<void>;
   resolveMarket: (outcome: PositionSide) => Promise<void>;
-  claimReward: () => Promise<void>;
-  depositCollateral: (amountUsd: number) => Promise<void>;
-  withdrawCollateral: (amountUsd: number) => Promise<void>;
+  claimReward: (
+    nullifier: string,
+    payoutAmountLow: string,
+    payoutRecipient: string,
+    proof: ProofArtifact
+  ) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
 export const useShadowMarket = (): ShadowMarketState => {
-  const integrations = useMemo<IntegrationBundle>(() => createMockIntegrations(), []);
+  const integrations = useMemo<IntegrationBundle>(() => createIntegrations(), []);
   const [wallet, setWallet] = useState<WalletSession | null>(null);
+  const [factory, setFactory] = useState<FactorySnapshot | null>(null);
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
-  const [vault, setVault] = useState<VaultSnapshot | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>(mockActivity);
   const [status, setStatus] = useState<AsyncStates>(defaultStates);
   const [error, setError] = useState<string | null>(null);
@@ -107,79 +116,100 @@ export const useShadowMarket = (): ShadowMarketState => {
 
   const refresh = useCallback(async (): Promise<void> => {
     await withStatus("boot", async () => {
-      const nextMarkets = await integrations.contracts.listMarkets();
+      const activeSession = await integrations.wallet.getActiveSession();
+      setWallet(activeSession);
+
+      if (!activeSession) {
+        setFactory(null);
+        setMarkets([]);
+        return;
+      }
+
+      const [nextFactory, nextMarkets] = await Promise.all([
+        integrations.contracts.getFactorySnapshot(),
+        integrations.contracts.listMarkets()
+      ]);
+
+      setFactory(nextFactory);
       setMarkets(nextMarkets);
       if (!selectedMarketId && nextMarkets[0]) {
         setSelectedMarketId(nextMarkets[0].id);
-      }
-
-      const activeSession = await integrations.wallet.getActiveSession();
-      setWallet(activeSession);
-      if (activeSession) {
-        const snapshot = await integrations.contracts.getVaultSnapshot(activeSession.address);
-        setVault(snapshot);
       }
     });
   }, [integrations, selectedMarketId, withStatus]);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => {
+      // status/error state is handled inside withStatus.
+    });
   }, [refresh]);
 
   const connectWallet = useCallback(async (): Promise<void> => {
     await withStatus("connect", async () => {
       const session = await integrations.wallet.connect();
       setWallet(session);
-      const snapshot = await integrations.contracts.getVaultSnapshot(session.address);
-      setVault(snapshot);
       setActivity((previous) =>
         prependActivity(previous, "Wallet connected", `${session.connector} on ${session.chainId}`, "success")
       );
     });
-  }, [integrations, withStatus]);
+    await refresh().catch(() => {
+      // surfaced via status/error state
+    });
+  }, [integrations, refresh, withStatus]);
 
   const disconnectWallet = useCallback(async (): Promise<void> => {
     await integrations.wallet.disconnect();
     setWallet(null);
-    setVault(null);
+    setFactory(null);
+    setMarkets([]);
     setActivity((previous) => prependActivity(previous, "Wallet disconnected", "Session cleared", "info"));
   }, [integrations]);
 
-  const placePrivatePosition = useCallback(
-    async (side: PositionSide, amountUsd: number): Promise<void> => {
+  const createMarket = useCallback(
+    async (request: CreateMarketRequest): Promise<void> => {
+      await withStatus("create", async () => {
+        const receipt = await integrations.contracts.createMarket(request);
+        setActivity((previous) =>
+          prependActivity(
+            previous,
+            "Market created",
+            `Market #${receipt.marketId} deployed at ${receipt.marketAddress} | ${receipt.txHash}`,
+            "success"
+          )
+        );
+        setSelectedMarketId(receipt.marketId);
+      });
+      await refresh().catch(() => {
+        // surfaced via status/error state
+      });
+    },
+    [integrations, refresh, withStatus]
+  );
+
+  const addCommitment = useCallback(
+    async (commitment: string, proof: ProofArtifact): Promise<void> => {
       if (!selectedMarket) {
         return;
       }
-      await withStatus("position", async () => {
-        const commitment = `0xcommit-${selectedMarket.id}-${Date.now().toString(16)}`;
-        const proof = await integrations.prover.generatePositionProof({
-          marketId: selectedMarket.id,
-          side,
-          amountUsd,
+      await withStatus("commitment", async () => {
+        const receipt = await integrations.contracts.addCommitment({
+          marketAddress: selectedMarket.address,
           commitment,
-          previousRoot: selectedMarket.currentMerkleRoot
-        });
-
-        const receipt = await integrations.contracts.submitPosition(
-          {
-            marketId: selectedMarket.id,
-            side,
-            amountUsd,
-            collateralCommitment: commitment
-          },
           proof
-        );
+        });
 
         setActivity((previous) =>
           prependActivity(
             previous,
-            "Private position submitted",
-            `Market #${selectedMarket.id} ${side.toUpperCase()} $${amountUsd.toLocaleString()} | ${receipt.txHash}`,
+            "Commitment added",
+            `Market #${selectedMarket.id} commitment inserted | ${receipt.txHash}`,
             "success"
           )
         );
       });
-      await refresh();
+      await refresh().catch(() => {
+        // surfaced via status/error state
+      });
     },
     [integrations, refresh, selectedMarket, withStatus]
   );
@@ -190,125 +220,77 @@ export const useShadowMarket = (): ShadowMarketState => {
         return;
       }
       await withStatus("resolve", async () => {
-        const receipt = await integrations.contracts.resolveMarket(selectedMarket.id, outcome);
+        const receipt = await integrations.contracts.resolveMarket({
+          marketAddress: selectedMarket.address,
+          outcome
+        });
         setActivity((previous) =>
           prependActivity(
             previous,
             "Market resolved",
-            `Market #${selectedMarket.id} resolved to ${outcome.toUpperCase()} | ${receipt.txHash}`,
+            `Market #${selectedMarket.id} -> ${outcome.toUpperCase()} | ${receipt.txHash}`,
             "warning"
           )
         );
       });
-      await refresh();
+      await refresh().catch(() => {
+        // surfaced via status/error state
+      });
     },
     [integrations, refresh, selectedMarket, withStatus]
   );
 
-  const claimReward = useCallback(async (): Promise<void> => {
-    if (!selectedMarket || !wallet) {
-      return;
-    }
-    await withStatus("claim", async () => {
-      const expectedOutcome = selectedMarket.resolvedOutcome ?? "yes";
-      const proof = await integrations.prover.generateClaimProof({
-        marketId: selectedMarket.id,
-        expectedOutcome,
-        payoutRecipient: wallet.address
-      });
-
-      const receipt = await integrations.contracts.claimReward(
-        {
-          marketId: selectedMarket.id,
-          payoutRecipient: wallet.address
-        },
-        proof
-      );
-
-      setActivity((previous) =>
-        prependActivity(
-          previous,
-          "Reward claimed",
-          `Payout $${receipt.payoutUsd.toLocaleString()} sent to ${wallet.address} | ${receipt.txHash}`,
-          "success"
-        )
-      );
-    });
-    await refresh();
-  }, [integrations, refresh, selectedMarket, wallet, withStatus]);
-
-  const depositCollateral = useCallback(
-    async (amountUsd: number): Promise<void> => {
-      await withStatus("deposit", async () => {
-        const receipt = await integrations.contracts.deposit(amountUsd, `0xnote-${Date.now().toString(16)}`);
-        setActivity((previous) =>
-          prependActivity(
-            previous,
-            "Collateral shielded",
-            `$${amountUsd.toLocaleString()} deposited into ShieldVault | ${receipt.txHash}`,
-            "info"
-          )
-        );
-      });
-      if (wallet) {
-        const snapshot = await integrations.contracts.getVaultSnapshot(wallet.address);
-        setVault(snapshot);
-      }
-    },
-    [integrations, wallet, withStatus]
-  );
-
-  const withdrawCollateral = useCallback(
-    async (amountUsd: number): Promise<void> => {
-      if (!wallet || !vault) {
+  const claimReward = useCallback(
+    async (
+      nullifier: string,
+      payoutAmountLow: string,
+      payoutRecipient: string,
+      proof: ProofArtifact
+    ): Promise<void> => {
+      if (!selectedMarket) {
         return;
       }
-      await withStatus("withdraw", async () => {
-        const proof = await integrations.prover.generateWithdrawProof({
-          amountUsd,
-          recipient: wallet.address,
-          oldRoot: vault.noteRoot
-        });
-        const receipt = await integrations.contracts.withdraw(
-          {
-            amountUsd,
-            recipient: wallet.address
-          },
+      await withStatus("claim", async () => {
+        const receipt = await integrations.contracts.claimReward({
+          marketAddress: selectedMarket.address,
+          nullifier,
+          payoutRecipient,
+          payoutAmountLow,
           proof
-        );
+        });
 
         setActivity((previous) =>
           prependActivity(
             previous,
-            "Collateral withdrawn",
-            `$${amountUsd.toLocaleString()} unlocked to ${wallet.address} | ${receipt.txHash}`,
-            "info"
+            "Reward claimed",
+            `Market #${selectedMarket.id} nullifier ${nullifier} | ${receipt.txHash}`,
+            "success"
           )
         );
       });
-      const snapshot = await integrations.contracts.getVaultSnapshot(wallet.address);
-      setVault(snapshot);
+      await refresh().catch(() => {
+        // surfaced via status/error state
+      });
     },
-    [integrations, vault, wallet, withStatus]
+    [integrations, refresh, selectedMarket, withStatus]
   );
 
   return {
     integrations,
     wallet,
+    factory,
     markets,
     selectedMarket,
-    vault,
     activity,
     status,
     error,
     setSelectedMarketId,
     connectWallet,
     disconnectWallet,
-    placePrivatePosition,
+    createMarket,
+    addCommitment,
     resolveMarket,
     claimReward,
-    depositCollateral,
-    withdrawCollateral,
     refresh
   };
 };

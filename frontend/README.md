@@ -5,13 +5,27 @@ Dark-first UI for the private prediction market stack.
 ## What is included
 
 - Next.js App Router + TypeScript scaffold
-- responsive trading desk layout (market selector, private action panel, settlement, vault, activity)
+- minimal MVP trading desk layout (factory, markets, add commitment, resolve, claim, activity)
 - theme toggle (dark/light) with CSS variable system
 - integration-ready adapter boundaries for:
   - wallet connection
   - Starknet contract calls
-  - Noir proof generation
-- mock adapters and seeded data for UI-first workflow
+- mock adapter mode and live adapter mode (injected wallet + on-chain reads/writes)
+
+## Environment
+
+Copy `.env.example` to `.env.local`:
+
+```bash
+cp .env.example .env.local
+```
+
+Required in live mode:
+
+- `NEXT_PUBLIC_INTEGRATION_MODE=live`
+- `NEXT_PUBLIC_FACTORY_ADDRESS=<deployed MarketFactory>`
+
+In live mode, connect an injected Starknet wallet first; reads and writes are performed through the wallet provider/account.
 
 ## Run locally
 
@@ -27,16 +41,26 @@ Open <http://localhost:3000>.
 
 - `src/lib/integrations/wallet.ts`
 - `src/lib/integrations/contracts.ts`
-- `src/lib/integrations/prover.ts`
 - `src/lib/integrations/index.ts`
 
-Current UI uses `src/lib/mocks/mock-integrations.ts` through `useShadowMarket()`.
+Runtime bundle selector:
 
-## Swap from mocks to live integrations
+- `src/lib/use-integrations.ts`
 
-1. Implement real adapters (e.g. `starknet-react` + typed contract wrappers + prover service bridge).
-2. Replace `createMockIntegrations()` in `src/lib/use-shadow-market.ts` with a live bundle factory.
-3. Keep public-input schema and proof flow aligned with Cairo contracts:
-   - `Market.add_commitment` PI: `[market_id, leaf_index, commitment, old_root, new_root]`
-   - `Market.claim_reward` PI: `[market_id, root, outcome, nullifier, payout_low, payout_high, payout_recipient]`
-   - `ShieldVault.withdraw` PI: `[nullifier, amount_low, amount_high, recipient, old_root, new_root]`
+Live adapter implementation:
+
+- `src/lib/live/wallet.ts`
+- `src/lib/live/contracts.ts`
+
+Mock fallback:
+
+- `src/lib/mocks/mock-integrations.ts`
+
+## ZK input requirements
+
+For MVP simplicity, proof payloads are entered directly in the UI.
+Keep these schemas aligned with Cairo contracts:
+
+- `MarketFactory.create_market(question_hash, oracle, end_time)`
+- `Market.add_commitment` PI: `[market_id, leaf_index, commitment, old_root, new_root]`
+- `Market.claim_reward` PI: `[market_id, root, outcome, nullifier, payout_low, payout_high, payout_recipient]`

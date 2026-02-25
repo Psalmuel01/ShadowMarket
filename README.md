@@ -93,7 +93,8 @@ npm install
 npm run dev
 ```
 
-The frontend is UI-first and currently uses mock adapters for wallet/contracts/prover.
+The frontend supports mock and live adapters for wallet + contract integration.
+It focuses on a minimal MVP flow: create market, add commitment, resolve, claim.
 Integration boundary interfaces are under:
 
 - `/Users/sam/Desktop/Starknet/ShadowMarket/frontend/src/lib/integrations`

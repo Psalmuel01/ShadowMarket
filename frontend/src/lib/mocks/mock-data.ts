@@ -1,56 +1,43 @@
-import type { ActivityItem, MarketSummary, VaultSnapshot } from "@/lib/types";
+import type { ActivityItem, FactorySnapshot, MarketSummary } from "@/lib/types";
 
 export const mockMarkets: MarketSummary[] = [
   {
     id: "42",
-    question: "Will Starknet exceed 25M weekly transactions before June 2026?",
-    category: "L2 Usage",
-    endTimeIso: "2026-05-30T19:00:00.000Z",
+    address: "0x04d3...market-42",
+    questionHash: "0x0442daaa9f1",
     oracle: "0x0479...oracle-multisig",
+    endTimeIso: "2026-05-30T19:00:00.000Z",
     status: "live",
-    yesOdds: 61,
-    noOdds: 39,
-    volumeUsd: 1_820_400,
-    totalCommitments: 1284,
-    currentMerkleRoot: "0x07fdb2be812f1399c16",
-    resolvedOutcome: null
+    resolvedOutcome: null,
+    merkleRoot: "0x07fdb2be812f1399c16",
+    nextIndex: 1284
   },
   {
     id: "51",
-    question: "Will ETH average gas stay under 20 gwei in Q2 2026?",
-    category: "Ethereum",
-    endTimeIso: "2026-06-28T20:00:00.000Z",
+    address: "0x05b7...market-51",
+    questionHash: "0x0118ecf7c30",
     oracle: "0x04ac...oracle-multisig",
+    endTimeIso: "2026-06-28T20:00:00.000Z",
     status: "live",
-    yesOdds: 44,
-    noOdds: 56,
-    volumeUsd: 1_142_220,
-    totalCommitments: 932,
-    currentMerkleRoot: "0x03d133f21f027eb8a73",
-    resolvedOutcome: null
+    resolvedOutcome: null,
+    merkleRoot: "0x03d133f21f027eb8a73",
+    nextIndex: 932
   },
   {
     id: "34",
-    question: "Will BTC close above $120k by March 31, 2026?",
-    category: "Crypto Macro",
-    endTimeIso: "2026-03-31T23:00:00.000Z",
+    address: "0x03e1...market-34",
+    questionHash: "0x0999c134001",
     oracle: "0x051b...oracle-multisig",
+    endTimeIso: "2026-03-31T23:00:00.000Z",
     status: "resolved",
-    yesOdds: 28,
-    noOdds: 72,
-    volumeUsd: 2_901_800,
-    totalCommitments: 2013,
-    currentMerkleRoot: "0x08906afee02bb88ec11",
-    resolvedOutcome: "no"
+    resolvedOutcome: "no",
+    merkleRoot: "0x08906afee02bb88ec11",
+    nextIndex: 2013
   }
 ];
 
-export const mockVaultSnapshot: VaultSnapshot = {
-  totalPoolUsd: 8_100_550,
-  userAvailableUsd: 24_500,
-  userShieldedNotes: 7,
-  noteRoot: "0x03a1f24eb109abef90",
-  nextNoteIndex: 4821
+export const mockFactorySnapshot: FactorySnapshot = {
+  nextMarketId: 52
 };
 
 export const mockActivity: ActivityItem[] = [
@@ -70,8 +57,8 @@ export const mockActivity: ActivityItem[] = [
   },
   {
     id: "a3",
-    title: "Vault note appended",
-    detail: "Deposit added note index 4820 with updated vault root.",
+    title: "Market deployed",
+    detail: "Market #51 deployed by factory owner.",
     atIso: "2026-02-25T13:40:00.000Z",
     severity: "info"
   }

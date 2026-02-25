@@ -176,6 +176,10 @@ a {
   gap: 0.9rem;
 }
 
+.hero-grid.minimal {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
 .hero-card,
 .metric-card,
 .panel {
@@ -228,6 +232,32 @@ a {
   margin-top: 0.4rem;
   display: block;
   font-size: 1.55rem;
+}
+
+.kv-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.kv-grid div {
+  background: color-mix(in srgb, var(--bg-elevated) 73%, transparent);
+  border: 1px solid var(--stroke);
+  border-radius: 0.7rem;
+  padding: 0.62rem;
+}
+
+.kv-grid p {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+.kv-grid strong {
+  margin-top: 0.3rem;
+  display: block;
+  font-size: 0.86rem;
 }
 
 .metric-card p {
@@ -351,7 +381,23 @@ a {
   padding: 0.62rem 0.72rem;
 }
 
+.field textarea {
+  font: inherit;
+  color: inherit;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  border: 1px solid var(--stroke);
+  border-radius: 0.64rem;
+  padding: 0.62rem 0.72rem;
+  resize: vertical;
+  min-height: 4.2rem;
+}
+
 .field input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.field textarea:focus {
   outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 1px;
 }
@@ -493,6 +539,31 @@ a {
   color: var(--fg-muted);
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+.factory-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.46rem;
+}
+
+.factory-grid div {
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--bg-elevated) 64%, transparent);
+  border-radius: 0.62rem;
+  padding: 0.52rem 0.58rem;
+}
+
+.factory-grid p {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.74rem;
+}
+
+.factory-grid strong {
+  margin-top: 0.28rem;
+  display: block;
+  font-size: 0.84rem;
 }
 
 .vault-stats {

@@ -1,18 +1,17 @@
 import type {
+  AddCommitmentRequest,
   ClaimRewardRequest,
+  CreateMarketRequest,
+  FactorySnapshot,
   MarketSummary,
-  ProofArtifact,
-  SubmitPositionRequest,
-  VaultSnapshot,
-  WithdrawRequest
+  ResolveMarketRequest
 } from "@/lib/types";
 
 export interface ContractsAdapter {
+  getFactorySnapshot(): Promise<FactorySnapshot>;
   listMarkets(): Promise<MarketSummary[]>;
-  getVaultSnapshot(userAddress: string): Promise<VaultSnapshot>;
-  submitPosition(request: SubmitPositionRequest, proof: ProofArtifact): Promise<{ txHash: string }>;
-  resolveMarket(marketId: string, outcome: "yes" | "no"): Promise<{ txHash: string }>;
-  claimReward(request: ClaimRewardRequest, proof: ProofArtifact): Promise<{ txHash: string; payoutUsd: number }>;
-  deposit(amountUsd: number, noteCommitment: string): Promise<{ txHash: string }>;
-  withdraw(request: WithdrawRequest, proof: ProofArtifact): Promise<{ txHash: string }>;
+  createMarket(request: CreateMarketRequest): Promise<{ txHash: string; marketId: string; marketAddress: string }>;
+  addCommitment(request: AddCommitmentRequest): Promise<{ txHash: string }>;
+  resolveMarket(request: ResolveMarketRequest): Promise<{ txHash: string }>;
+  claimReward(request: ClaimRewardRequest): Promise<{ txHash: string }>;
 }

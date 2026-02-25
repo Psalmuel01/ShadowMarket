@@ -1,27 +1,20 @@
 export type PositionSide = "yes" | "no";
 export type MarketStatus = "live" | "resolved";
 
-export interface MarketSummary {
-  id: string;
-  question: string;
-  category: string;
-  endTimeIso: string;
-  oracle: string;
-  status: MarketStatus;
-  yesOdds: number;
-  noOdds: number;
-  volumeUsd: number;
-  totalCommitments: number;
-  currentMerkleRoot: string;
-  resolvedOutcome: PositionSide | null;
+export interface FactorySnapshot {
+  nextMarketId: number;
 }
 
-export interface VaultSnapshot {
-  totalPoolUsd: number;
-  userAvailableUsd: number;
-  userShieldedNotes: number;
-  noteRoot: string;
-  nextNoteIndex: number;
+export interface MarketSummary {
+  id: string;
+  address: string;
+  questionHash: string;
+  oracle: string;
+  endTimeIso: string;
+  status: MarketStatus;
+  resolvedOutcome: PositionSide | null;
+  merkleRoot: string;
+  nextIndex: number;
 }
 
 export interface ProofArtifact {
@@ -30,21 +23,29 @@ export interface ProofArtifact {
   proof: string[];
 }
 
-export interface SubmitPositionRequest {
-  marketId: string;
-  side: PositionSide;
-  amountUsd: number;
-  collateralCommitment: string;
+export interface CreateMarketRequest {
+  questionHash: string;
+  oracle: string;
+  endTimeIso: string;
+}
+
+export interface AddCommitmentRequest {
+  marketAddress: string;
+  commitment: string;
+  proof: ProofArtifact;
+}
+
+export interface ResolveMarketRequest {
+  marketAddress: string;
+  outcome: PositionSide;
 }
 
 export interface ClaimRewardRequest {
-  marketId: string;
+  marketAddress: string;
+  nullifier: string;
   payoutRecipient: string;
-}
-
-export interface WithdrawRequest {
-  amountUsd: number;
-  recipient: string;
+  payoutAmountLow: string;
+  proof: ProofArtifact;
 }
 
 export interface ActivityItem {

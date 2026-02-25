@@ -1,26 +1,41 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatusPill } from "@/components/status-pill";
-import type { PositionSide } from "@/lib/types";
+import type { ProofArtifact } from "@/lib/types";
 import { useShadowMarket } from "@/lib/use-shadow-market";
 
-const formatUsd = (value: number): string => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0
-  }).format(value);
-};
-
 const formatDateTime = (iso: string): string => {
-  return new Date(iso).toLocaleString("en-US", {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() === 0) {
+    return "-";
+  }
+  return parsed.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit"
   });
+};
+
+const toLocalDateTimeInput = (date: Date): string => {
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 16);
+};
+
+const shorten = (value: string): string => {
+  if (value.length < 18) {
+    return value;
+  }
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+};
+
+const parseFelts = (raw: string): string[] => {
+  return raw
+    .split(/[\s,\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 const toSeverityLabel = (severity: "info" | "success" | "warning"): string => {
@@ -36,36 +51,101 @@ const toSeverityLabel = (severity: "info" | "success" | "warning"): string => {
 export function Dashboard(): JSX.Element {
   const {
     wallet,
+    factory,
     markets,
     selectedMarket,
-    vault,
     activity,
     status,
     error,
     setSelectedMarketId,
     connectWallet,
     disconnectWallet,
-    placePrivatePosition,
+    createMarket,
+    addCommitment,
     resolveMarket,
-    claimReward,
-    depositCollateral,
-    withdrawCollateral
+    claimReward
   } = useShadowMarket();
 
-  const [positionSide, setPositionSide] = useState<PositionSide>("yes");
-  const [positionAmount, setPositionAmount] = useState<number>(1000);
-  const [vaultAmount, setVaultAmount] = useState<number>(500);
+  const [createQuestionHash, setCreateQuestionHash] = useState<string>("0x1234");
+  const [createOracle, setCreateOracle] = useState<string>("0x0b71");
+  const [createEndTimeInput, setCreateEndTimeInput] = useState<string>(() =>
+    toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+  );
 
-  const canClaim = Boolean(wallet && selectedMarket?.status === "resolved");
+  const [commitmentValue, setCommitmentValue] = useState<string>("0xabc");
+  const [commitProgramHash, setCommitProgramHash] = useState<string>(process.env.NEXT_PUBLIC_POSITION_PROGRAM_HASH ?? "");
+  const [commitPublicInputsRaw, setCommitPublicInputsRaw] = useState<string>("");
+  const [commitProofRaw, setCommitProofRaw] = useState<string>("");
 
-  const executionStatuses = useMemo(() => {
+  const [claimNullifier, setClaimNullifier] = useState<string>("0x111");
+  const [claimPayoutLow, setClaimPayoutLow] = useState<string>("0");
+  const [claimRecipient, setClaimRecipient] = useState<string>(wallet?.address ?? "");
+  const [claimProgramHash, setClaimProgramHash] = useState<string>(process.env.NEXT_PUBLIC_CLAIM_PROGRAM_HASH ?? "");
+  const [claimPublicInputsRaw, setClaimPublicInputsRaw] = useState<string>("");
+  const [claimProofRaw, setClaimProofRaw] = useState<string>("");
+
+  const statusEntries = useMemo(() => {
     return [
       { label: "Wallet", status: status.connect },
-      { label: "Position", status: status.position },
-      { label: "Claim", status: status.claim },
-      { label: "Vault", status: status.deposit === "running" || status.withdraw === "running" ? "running" : "idle" }
+      { label: "Create", status: status.create },
+      { label: "Commit", status: status.commitment },
+      { label: "Resolve", status: status.resolve },
+      { label: "Claim", status: status.claim }
     ] as const;
   }, [status]);
+
+  useEffect(() => {
+    if (wallet?.address && !claimRecipient) {
+      setClaimRecipient(wallet.address);
+    }
+  }, [wallet, claimRecipient]);
+
+  const handleCreateMarket = (): void => {
+    if (!createQuestionHash.trim() || !createOracle.trim() || !createEndTimeInput.trim()) {
+      return;
+    }
+
+    const parsedEnd = new Date(createEndTimeInput);
+    if (Number.isNaN(parsedEnd.getTime())) {
+      return;
+    }
+
+    void createMarket({
+      questionHash: createQuestionHash.trim(),
+      oracle: createOracle.trim(),
+      endTimeIso: parsedEnd.toISOString()
+    });
+  };
+
+  const handleAddCommitment = (): void => {
+    if (!selectedMarket || !commitmentValue.trim() || !commitProgramHash.trim()) {
+      return;
+    }
+
+    const proof: ProofArtifact = {
+      programHash: commitProgramHash.trim(),
+      publicInputs: parseFelts(commitPublicInputsRaw),
+      proof: parseFelts(commitProofRaw)
+    };
+
+    void addCommitment(commitmentValue.trim(), proof);
+  };
+
+  const handleClaim = (): void => {
+    const recipient = claimRecipient.trim() || wallet?.address || "";
+    const payoutLow = claimPayoutLow.trim() || "0";
+    if (!selectedMarket || !claimNullifier.trim() || !claimProgramHash.trim() || !recipient) {
+      return;
+    }
+
+    const proof: ProofArtifact = {
+      programHash: claimProgramHash.trim(),
+      publicInputs: parseFelts(claimPublicInputsRaw),
+      proof: parseFelts(claimProofRaw)
+    };
+
+    void claimReward(claimNullifier.trim(), payoutLow, recipient, proof);
+  };
 
   return (
     <div className="page-shell">
@@ -75,60 +155,62 @@ export function Dashboard(): JSX.Element {
 
       <header className="topbar glass">
         <div className="brand-wrap">
-          <p className="eyebrow">ShadowMarket</p>
-          <h1>Private Prediction Desk</h1>
+          <p className="eyebrow">ShadowMarket MVP</p>
+          <h1>Wallet -> Contracts -> ZK Proof Calls</h1>
         </div>
         <div className="topbar-actions">
           <ThemeToggle />
           {wallet ? (
             <button className="button secondary" type="button" onClick={() => void disconnectWallet()}>
-              {wallet.address}
+              {shorten(wallet.address)}
             </button>
           ) : (
             <button className="button primary" type="button" onClick={() => void connectWallet()}>
-              Connect Starknet Wallet
+              Connect Wallet
             </button>
           )}
         </div>
       </header>
 
-      <section className="hero-grid">
+      <section className="hero-grid minimal">
         <article className="glass hero-card reveal">
           <p className="eyebrow">Selected Market</p>
-          <h2>{selectedMarket?.question ?? "Loading markets..."}</h2>
+          <h2>#{selectedMarket?.id ?? "-"}</h2>
           <div className="market-meta-row">
-            <span>{selectedMarket?.category ?? "-"}</span>
-            <span>Oracle {selectedMarket?.oracle ?? "-"}</span>
+            <span>{selectedMarket ? selectedMarket.status.toUpperCase() : "NO_MARKET"}</span>
             <span>Ends {selectedMarket ? formatDateTime(selectedMarket.endTimeIso) : "-"}</span>
+            <span>Next index {selectedMarket?.nextIndex ?? "-"}</span>
           </div>
-          <div className="odds-wrap">
+          <div className="kv-grid">
             <div>
-              <p>YES</p>
-              <strong>{selectedMarket?.yesOdds ?? 0}%</strong>
+              <p>Address</p>
+              <strong className="mono truncate">{selectedMarket?.address ?? "-"}</strong>
             </div>
             <div>
-              <p>NO</p>
-              <strong>{selectedMarket?.noOdds ?? 0}%</strong>
+              <p>Question Hash</p>
+              <strong className="mono truncate">{selectedMarket?.questionHash ?? "-"}</strong>
+            </div>
+            <div>
+              <p>Oracle</p>
+              <strong className="mono truncate">{selectedMarket?.oracle ?? "-"}</strong>
+            </div>
+            <div>
+              <p>Merkle Root</p>
+              <strong className="mono truncate">{selectedMarket?.merkleRoot ?? "-"}</strong>
             </div>
           </div>
         </article>
 
         <article className="glass metric-card reveal delay-1">
-          <p>Total Volume</p>
-          <h3>{formatUsd(selectedMarket?.volumeUsd ?? 0)}</h3>
-          <small>{selectedMarket?.totalCommitments ?? 0} private commitments</small>
+          <p>Factory Next ID</p>
+          <h3>#{factory?.nextMarketId ?? "-"}</h3>
+          <small>Source: `MarketFactory.next_market_id`</small>
         </article>
 
         <article className="glass metric-card reveal delay-2">
-          <p>Merkle Root</p>
-          <h3 className="mono truncate">{selectedMarket?.currentMerkleRoot ?? "0x0"}</h3>
-          <small>Bound to Noir public inputs</small>
-        </article>
-
-        <article className="glass metric-card reveal delay-3">
-          <p>ShieldVault Root</p>
-          <h3 className="mono truncate">{vault?.noteRoot ?? "Connect wallet"}</h3>
-          <small>Next note #{vault?.nextNoteIndex ?? "-"}</small>
+          <p>Total Markets</p>
+          <h3>{markets.length}</h3>
+          <small>Read via factory index</small>
         </article>
       </section>
 
@@ -136,20 +218,20 @@ export function Dashboard(): JSX.Element {
         <aside className="glass panel markets-panel reveal">
           <div className="panel-head">
             <h4>Markets</h4>
-            <span>{markets.length} loaded</span>
+            <span>{markets.length} indexed</span>
           </div>
           <div className="markets-list">
             {markets.map((market) => (
               <button
-                key={market.id}
+                key={market.address}
                 type="button"
-                className={`market-item ${selectedMarket?.id === market.id ? "active" : ""}`}
+                className={`market-item ${selectedMarket?.address === market.address ? "active" : ""}`}
                 onClick={() => setSelectedMarketId(market.id)}
               >
-                <p>{market.question}</p>
+                <p>#{market.id} {market.status.toUpperCase()}</p>
                 <div>
-                  <span>{market.status.toUpperCase()}</span>
-                  <span>{formatUsd(market.volumeUsd)}</span>
+                  <span>{formatDateTime(market.endTimeIso)}</span>
+                  <span>{shorten(market.address)}</span>
                 </div>
               </button>
             ))}
@@ -159,35 +241,26 @@ export function Dashboard(): JSX.Element {
         <main className="panel-stack">
           <article className="glass panel reveal delay-1">
             <div className="panel-head">
-              <h4>Private Position</h4>
-              <span>Commitment + proof + insert</span>
-            </div>
-
-            <div className="side-toggle" role="tablist" aria-label="Position side">
-              <button
-                type="button"
-                className={positionSide === "yes" ? "active" : ""}
-                onClick={() => setPositionSide("yes")}
-              >
-                Long YES
-              </button>
-              <button
-                type="button"
-                className={positionSide === "no" ? "active" : ""}
-                onClick={() => setPositionSide("no")}
-              >
-                Long NO
-              </button>
+              <h4>Create Market</h4>
+              <span>Factory owner call</span>
             </div>
 
             <label className="field">
-              <span>Collateral (USD)</span>
+              <span>Question Hash (felt)</span>
+              <input value={createQuestionHash} onChange={(event) => setCreateQuestionHash(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Oracle Address</span>
+              <input value={createOracle} onChange={(event) => setCreateOracle(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>End Time</span>
               <input
-                type="number"
-                min={10}
-                step={10}
-                value={positionAmount}
-                onChange={(event) => setPositionAmount(Number(event.target.value))}
+                type="datetime-local"
+                value={createEndTimeInput}
+                onChange={(event) => setCreateEndTimeInput(event.target.value)}
               />
             </label>
 
@@ -195,25 +268,67 @@ export function Dashboard(): JSX.Element {
               <button
                 type="button"
                 className="button primary"
-                disabled={!wallet || !selectedMarket || status.position === "running"}
-                onClick={() => void placePrivatePosition(positionSide, positionAmount)}
+                disabled={!wallet || status.create === "running"}
+                onClick={handleCreateMarket}
               >
-                {status.position === "running" ? "Generating proof..." : "Submit Private Position"}
+                {status.create === "running" ? "Creating..." : "Create Market"}
               </button>
             </div>
           </article>
 
           <article className="glass panel reveal delay-2">
             <div className="panel-head">
-              <h4>Settlement</h4>
-              <span>Resolve then claim</span>
+              <h4>Add Commitment (ZK)</h4>
+              <span>`Market.add_commitment`</span>
+            </div>
+
+            <label className="field">
+              <span>Commitment (felt)</span>
+              <input value={commitmentValue} onChange={(event) => setCommitmentValue(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Program Hash</span>
+              <input value={commitProgramHash} onChange={(event) => setCommitProgramHash(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Public Inputs (felt list, comma/space/newline)</span>
+              <textarea
+                value={commitPublicInputsRaw}
+                onChange={(event) => setCommitPublicInputsRaw(event.target.value)}
+                rows={3}
+              />
+            </label>
+
+            <label className="field">
+              <span>Proof (felt list)</span>
+              <textarea value={commitProofRaw} onChange={(event) => setCommitProofRaw(event.target.value)} rows={3} />
+            </label>
+
+            <div className="action-row">
+              <button
+                type="button"
+                className="button primary"
+                disabled={!wallet || !selectedMarket || status.commitment === "running"}
+                onClick={handleAddCommitment}
+              >
+                {status.commitment === "running" ? "Submitting..." : "Submit Commitment"}
+              </button>
+            </div>
+          </article>
+
+          <article className="glass panel reveal delay-3">
+            <div className="panel-head">
+              <h4>Resolve + Claim</h4>
+              <span>`resolve_market` and `claim_reward`</span>
             </div>
 
             <div className="action-row settlement-actions">
               <button
                 type="button"
                 className="button secondary"
-                disabled={!selectedMarket || selectedMarket.status === "resolved" || status.resolve === "running"}
+                disabled={!wallet || !selectedMarket || status.resolve === "running"}
                 onClick={() => void resolveMarket("yes")}
               >
                 Resolve YES
@@ -221,107 +336,82 @@ export function Dashboard(): JSX.Element {
               <button
                 type="button"
                 className="button secondary"
-                disabled={!selectedMarket || selectedMarket.status === "resolved" || status.resolve === "running"}
+                disabled={!wallet || !selectedMarket || status.resolve === "running"}
                 onClick={() => void resolveMarket("no")}
               >
                 Resolve NO
               </button>
+            </div>
+
+            <label className="field">
+              <span>Nullifier (felt)</span>
+              <input value={claimNullifier} onChange={(event) => setClaimNullifier(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Payout Amount Low (u256.low)</span>
+              <input value={claimPayoutLow} onChange={(event) => setClaimPayoutLow(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Payout Recipient</span>
+              <input
+                value={claimRecipient}
+                onChange={(event) => setClaimRecipient(event.target.value)}
+                placeholder={wallet?.address ?? "0x..."}
+              />
+            </label>
+
+            <label className="field">
+              <span>Program Hash</span>
+              <input value={claimProgramHash} onChange={(event) => setClaimProgramHash(event.target.value)} />
+            </label>
+
+            <label className="field">
+              <span>Public Inputs (felt list)</span>
+              <textarea
+                value={claimPublicInputsRaw}
+                onChange={(event) => setClaimPublicInputsRaw(event.target.value)}
+                rows={3}
+              />
+            </label>
+
+            <label className="field">
+              <span>Proof (felt list)</span>
+              <textarea value={claimProofRaw} onChange={(event) => setClaimProofRaw(event.target.value)} rows={3} />
+            </label>
+
+            <div className="action-row">
               <button
                 type="button"
                 className="button primary"
-                disabled={!canClaim || status.claim === "running"}
-                onClick={() => void claimReward()}
+                disabled={!wallet || !selectedMarket || status.claim === "running"}
+                onClick={handleClaim}
               >
                 {status.claim === "running" ? "Claiming..." : "Claim Reward"}
               </button>
             </div>
-          </article>
-
-          <article className="glass panel reveal delay-3">
-            <div className="panel-head">
-              <h4>Proof Pipeline</h4>
-              <span>Client intent -> Noir proof -> Garaga verify</span>
-            </div>
-            <div className="status-grid">
-              {executionStatuses.map((entry) => (
-                <StatusPill key={entry.label} label={entry.label} status={entry.status} />
-              ))}
-            </div>
-            <div className="integration-map">
-              <div>
-                <h5>Position Entry</h5>
-                <p>`position_commitment.nr` -> `Market.add_commitment` -> root update.</p>
-              </div>
-              <div>
-                <h5>Claim Flow</h5>
-                <p>`claim_reward.nr` -> `Market.claim_reward` -> nullifier mark + payout.</p>
-              </div>
-              <div>
-                <h5>Vault Flow</h5>
-                <p>`withdraw` proof -> `ShieldVault.withdraw` with strict root continuity.</p>
-              </div>
-            </div>
-            {error ? <p className="error-banner">{error}</p> : null}
           </article>
         </main>
 
         <aside className="panel-stack">
           <article className="glass panel reveal delay-1">
             <div className="panel-head">
-              <h4>ShieldVault</h4>
-              <span>Encrypted note lifecycle</span>
+              <h4>Status</h4>
+              <span>integration pipeline</span>
             </div>
-
-            <div className="vault-stats">
-              <div>
-                <p>Pool</p>
-                <strong>{formatUsd(vault?.totalPoolUsd ?? 0)}</strong>
-              </div>
-              <div>
-                <p>Available</p>
-                <strong>{formatUsd(vault?.userAvailableUsd ?? 0)}</strong>
-              </div>
-              <div>
-                <p>Your Notes</p>
-                <strong>{vault?.userShieldedNotes ?? 0}</strong>
-              </div>
+            <div className="status-grid">
+              {statusEntries.map((entry) => (
+                <StatusPill key={entry.label} label={entry.label} status={entry.status} />
+              ))}
             </div>
-
-            <label className="field">
-              <span>Amount (USD)</span>
-              <input
-                type="number"
-                min={10}
-                step={10}
-                value={vaultAmount}
-                onChange={(event) => setVaultAmount(Number(event.target.value))}
-              />
-            </label>
-
-            <div className="action-row settlement-actions">
-              <button
-                type="button"
-                className="button secondary"
-                disabled={!wallet || status.deposit === "running"}
-                onClick={() => void depositCollateral(vaultAmount)}
-              >
-                {status.deposit === "running" ? "Depositing..." : "Deposit"}
-              </button>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={!wallet || status.withdraw === "running"}
-                onClick={() => void withdrawCollateral(vaultAmount)}
-              >
-                {status.withdraw === "running" ? "Withdrawing..." : "Withdraw"}
-              </button>
-            </div>
+            {error ? <p className="error-banner">{error}</p> : null}
           </article>
 
           <article className="glass panel reveal delay-2">
             <div className="panel-head">
               <h4>Recent Activity</h4>
-              <span>on-chain + prover events</span>
+              <span>tx + proof operations</span>
             </div>
             <div className="activity-list">
               {activity.map((item) => (
