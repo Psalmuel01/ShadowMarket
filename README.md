@@ -78,3 +78,22 @@ See:
 
 - `/Users/sam/Desktop/Starknet/ShadowMarket/docs/garaga_pipeline.md`
 - `/Users/sam/Desktop/Starknet/ShadowMarket/docs/shield_vault_tongo.md`
+
+## Frontend (Next.js)
+
+UI workspace:
+
+- `/Users/sam/Desktop/Starknet/ShadowMarket/frontend`
+
+Run:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend is UI-first and currently uses mock adapters for wallet/contracts/prover.
+Integration boundary interfaces are under:
+
+- `/Users/sam/Desktop/Starknet/ShadowMarket/frontend/src/lib/integrations`
